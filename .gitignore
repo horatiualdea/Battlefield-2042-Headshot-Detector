@@ -1,0 +1,5 @@
+# Ignore video input and output files
+*.mp4
+*.mkv
+*.avi
+*.mov
