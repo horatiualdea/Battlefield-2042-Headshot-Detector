@@ -10,8 +10,8 @@ from moviepy.video.fx.all import crop
 # Tesseract Configuration
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
-# Adjusted ROI (based on testing)
-ROI_X1, ROI_Y1, ROI_X2, ROI_Y2 = 1100, 800, 1400, 900  # x1, y1, x2, y2
+
+
 
 def preprocess_image(image):
     """Enhances text clarity without losing details."""
@@ -55,13 +55,28 @@ def crop_to_phone_format(clip):
 
     return crop(clip, x1=x1, y1=0, x2=x2, y2=height)
 
-def detect_headshot(video_path, output_portrait, intro_path=None, debug=False, max_gap=2, transition_duration=0.5, pre_headshot_duration=7, post_headshot_duration=2):
+def detect_headshot(video_path, output_portrait, debug=False, max_gap=None, transition_duration=0.5, pre_headshot_duration=7, post_headshot_duration=2):
+    if max_gap is None:
+        max_gap = pre_headshot_duration
+        
     if video_path.endswith(".mkv"):
         mp4_path = video_path.replace(".mkv", ".mp4")
         convert_to_mp4(video_path, mp4_path)
         video_path = mp4_path
 
     clip = VideoFileClip(video_path)  
+    _, height = clip.size  # Get video height
+
+    # Set ROI dynamically based on video resolution
+    if height == 1080:
+        ROI_X1, ROI_Y1, ROI_X2, ROI_Y2 = 1100, 800, 1400, 900  # 1080p ROI
+    elif height == 1440:
+        ROI_X1, ROI_Y1, ROI_X2, ROI_Y2 = 1466, 1066, 1866, 1200  # 1440p ROI
+    else:
+        raise ValueError(f"Unsupported height: {height}")
+
+    print(f"Detected video height: {height}, using ROI: {ROI_X1, ROI_Y1, ROI_X2, ROI_Y2}")
+
     highlights = []
     last_detection_time = -10
     current_clip_start = None
@@ -73,7 +88,6 @@ def detect_headshot(video_path, output_portrait, intro_path=None, debug=False, m
     for current_time in range(0, int(clip.duration)):
         frame = clip.get_frame(current_time)
 
-        ROI_X1, ROI_Y1, ROI_X2, ROI_Y2 = 1100, 800, 1400, 900
         roi = frame[ROI_Y1:ROI_Y2, ROI_X1:ROI_X2]
 
         if roi is None or roi.size == 0:
@@ -129,4 +143,4 @@ def detect_headshot(video_path, output_portrait, intro_path=None, debug=False, m
     clip.audio.reader.close_proc()
 
 # Run script
-detect_headshot("input_video.mp4", "highlights_portrait.mp4", intro_path="intro.mp4", debug=False)
+detect_headshot("input_video.mp4", "highlights_portrait.mp4", debug=True)
