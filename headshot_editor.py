@@ -1,7 +1,7 @@
+import os
 from moviepy.editor import VideoFileClip, concatenate_videoclips
 import cv2
 import pytesseract
-import os
 import numpy as np
 import subprocess
 from fuzzywuzzy import fuzz  # Requires `pip install fuzzywuzzy`
@@ -9,8 +9,6 @@ from moviepy.video.fx.all import crop
 
 # Tesseract Configuration
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-
-
 
 
 def preprocess_image(image):
@@ -29,15 +27,17 @@ def preprocess_image(image):
 
     return sharpened
 
+
 def is_similar_to_headshot(text):
     """Checks if the detected text contains or is similar to 'HEADSHOT'."""
     text = text.upper().replace(" ", "")
-    if "HEADSHOT" in text:
-        return True
+    return "HEADSHOT" in text
+
 
 def convert_to_mp4(input_path, output_path):
     """Converts MKV to MP4 using ffmpeg."""
     subprocess.run(["ffmpeg", "-i", input_path, "-codec", "copy", output_path], check=True)
+
 
 def crop_to_phone_format(clip):
     """Crops a video to 9:16 aspect ratio for vertical display."""
@@ -55,27 +55,27 @@ def crop_to_phone_format(clip):
 
     return crop(clip, x1=x1, y1=0, x2=x2, y2=height)
 
+
 def detect_headshot(video_path, output_portrait, debug=False, max_gap=None, transition_duration=0.5, pre_headshot_duration=7, post_headshot_duration=2):
     if max_gap is None:
         max_gap = pre_headshot_duration
-        
+
     if video_path.endswith(".mkv"):
         mp4_path = video_path.replace(".mkv", ".mp4")
         convert_to_mp4(video_path, mp4_path)
         video_path = mp4_path
 
-    clip = VideoFileClip(video_path)  
-    _, height = clip.size  # Get video height
-
-    # Set ROI dynamically based on video resolution
+    clip = VideoFileClip(video_path)
+    
+    # Detect video resolution to set correct ROI
+    _, height = clip.size
     if height == 1080:
-        ROI_X1, ROI_Y1, ROI_X2, ROI_Y2 = 1100, 800, 1400, 900  # 1080p ROI
+        ROI_X1, ROI_Y1, ROI_X2, ROI_Y2 = 1100, 800, 1400, 900
     elif height == 1440:
-        ROI_X1, ROI_Y1, ROI_X2, ROI_Y2 = 1466, 1066, 1866, 1200  # 1440p ROI
+        ROI_X1, ROI_Y1, ROI_X2, ROI_Y2 = 1466, 1066, 1866, 1200
     else:
-        raise ValueError(f"Unsupported height: {height}")
-
-    print(f"Detected video height: {height}, using ROI: {ROI_X1, ROI_Y1, ROI_X2, ROI_Y2}")
+        print(f"Warning: Unexpected resolution {height}p. Using default 1080p ROI.")
+        ROI_X1, ROI_Y1, ROI_X2, ROI_Y2 = 1100, 800, 1400, 900  # Default to 1080p ROI
 
     highlights = []
     last_detection_time = -10
@@ -125,7 +125,7 @@ def detect_headshot(video_path, output_portrait, debug=False, max_gap=None, tran
         highlights.append(clip.subclip(current_clip_start, current_clip_end))
 
     if not highlights:
-        print("Error: No 'HEADSHOT' detected! Check debug_frames/.")
+        print(f"Error: No 'HEADSHOT' detected in {video_path}! Check debug_frames/.")
         return
 
     final_clips = []
@@ -142,5 +142,26 @@ def detect_headshot(video_path, output_portrait, debug=False, max_gap=None, tran
     clip.reader.close()
     clip.audio.reader.close_proc()
 
-# Run script
-detect_headshot("input_video.mp4", "highlights_portrait.mp4", debug=True)
+
+# **Batch Processing for Multiple Videos**
+def process_multiple_videos(input_folder="input_videos", output_folder="output_videos", debug=False):
+    os.makedirs(output_folder, exist_ok=True)
+
+    video_files = [f for f in os.listdir(input_folder) if f.endswith((".mp4", ".mkv"))]
+
+    if not video_files:
+        print("No videos found in input folder.")
+        return
+
+    for video_file in video_files:
+        input_path = os.path.join(input_folder, video_file)
+        output_path = os.path.join(output_folder, f"highlight_{video_file}")
+
+        print(f"Processing {input_path} → {output_path}")
+        detect_headshot(input_path, output_path, debug=debug)
+
+    print("Batch processing complete!")
+
+
+# Run batch processing
+process_multiple_videos(debug=True)
