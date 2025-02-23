@@ -4,3 +4,5 @@
 *.avi
 *.mov
 debug_frames
+input_videos
+output_videos

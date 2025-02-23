@@ -56,7 +56,7 @@ def crop_to_phone_format(clip):
     return crop(clip, x1=x1, y1=0, x2=x2, y2=height)
 
 
-def detect_headshot(video_path, output_portrait, debug=False, max_gap=None, transition_duration=0.5, pre_headshot_duration=7, post_headshot_duration=2):
+def detect_headshot(video_path, output_basename, debug=False, max_gap=None, transition_duration=0.5, pre_headshot_duration=7, post_headshot_duration=2, max_video_duration=60):
     if max_gap is None:
         max_gap = pre_headshot_duration
 
@@ -66,7 +66,7 @@ def detect_headshot(video_path, output_portrait, debug=False, max_gap=None, tran
         video_path = mp4_path
 
     clip = VideoFileClip(video_path)
-    
+
     # Detect video resolution to set correct ROI
     _, height = clip.size
     if height == 1080:
@@ -128,16 +128,36 @@ def detect_headshot(video_path, output_portrait, debug=False, max_gap=None, tran
         print(f"Error: No 'HEADSHOT' detected in {video_path}! Check debug_frames/.")
         return
 
-    final_clips = []
-    for i in range(len(highlights) - 1):
-        final_clips.append(highlights[i].crossfadeout(transition_duration))
-    final_clips.append(highlights[-1])
+    # Splitting into multiple videos if needed
+    video_index = 1
+    current_duration = 0
+    current_clips = []
 
-    final_clip = concatenate_videoclips(final_clips, method="compose")
+    for highlight in highlights:
+        highlight_duration = highlight.duration
 
-    # Generate portrait version (9:16)
-    portrait_clip = crop_to_phone_format(final_clip)
-    portrait_clip.write_videofile(output_portrait, codec="libx264", audio_codec="aac", threads=64, preset="ultrafast", ffmpeg_params=["-pix_fmt", "yuv420p"])
+        if current_duration + highlight_duration > max_video_duration:
+            # Save the current video and start a new one
+            final_clip = concatenate_videoclips(current_clips, method="compose")
+            portrait_clip = crop_to_phone_format(final_clip)
+
+            output_file = f"{output_basename}_part{video_index}.mp4"
+            portrait_clip.write_videofile(output_file, codec="libx264", audio_codec="aac", threads=64, preset="ultrafast", ffmpeg_params=["-pix_fmt", "yuv420p"])
+
+            # Reset for new video
+            video_index += 1
+            current_duration = 0
+            current_clips = []
+
+        current_clips.append(highlight)
+        current_duration += highlight_duration
+
+    if current_clips:
+        final_clip = concatenate_videoclips(current_clips, method="compose")
+        portrait_clip = crop_to_phone_format(final_clip)
+
+        output_file = f"{output_basename}_part{video_index}.mp4"
+        portrait_clip.write_videofile(output_file, codec="libx264", audio_codec="aac", threads=64, preset="ultrafast", ffmpeg_params=["-pix_fmt", "yuv420p"])
 
     clip.reader.close()
     clip.audio.reader.close_proc()
